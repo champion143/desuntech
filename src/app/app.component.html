@@ -1,0 +1,8 @@
+<div class="row container-fluid">
+  <div *ngFor="let chart of chartData" [class]="chart.size">
+    <p class="text-center">{{ chart.chartHeader }}</p>
+    <div style="width: 100%; height: 400px;">
+      <ag-charts style="height: 100%" [options]="chart.chartOptions"></ag-charts>
+    </div>
+  </div>
+</div>
