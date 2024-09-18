@@ -7,6 +7,17 @@ import { loadDashboardConfigSuccess } from './redux/actions/chart.actions';
 import { Observable } from 'rxjs';
 import { selectDashboardConfig } from './redux/selectors/dashboard.selectors';
 import { DashboardService } from './services/dashboard.service';
+import { FormGroup, FormControl, Validators, FormArray } from '@angular/forms'
+
+
+export interface DashboardConfig {
+  _id: number;
+  chartHeader: string;
+  type: string,
+  data: any[],
+  size: string,
+  position: number
+}
 
 export interface ChartType {
   _id: number;
@@ -30,7 +41,13 @@ export class AppComponent {
     'quarter': 'col-3'
   }
 
-  dashboardConfig = [
+  types: any = {
+    'col-12': 'full',
+    'col-6': 'half',
+    'col-3': 'quarter'
+  }
+
+  dashboardConfig: DashboardConfig[] = [
     {
       _id: 1,
       chartHeader: 'Chart 1',
@@ -147,15 +164,137 @@ export class AppComponent {
       size: 'quarter',
       position: 5
     },
-
   ];
 
   chartData: ChartType[] = [];
+
+  myForm: FormGroup;
 
   constructor(private store: Store<AppState>, private dashboardService: DashboardService) {
     this.dashboardConfig.sort((a, b) => a.position - b.position);
     this.dashboardService.loadDashboardConfig(this.dashboardConfig);
     this.getConfig()
+    this.myForm = new FormGroup({
+      chartheader: new FormControl(1, [Validators.required]), // storing id
+      type: new FormControl('pie', [Validators.required]),
+      size: new FormControl('full', [Validators.required]),
+      position: new FormControl(1, [Validators.required]),
+      data: new FormArray([], [Validators.required]),
+    })
+    this.prepareData(1)
+  }
+
+  prepareData(chartheader: number) {
+    this.data.clear()
+    const formArray = this.myForm.get('data') as FormArray;
+    const dynamicData = this.chartData.filter((item) => item._id == chartheader);
+    if (dynamicData.length > 0) {
+      const chartOptionData = dynamicData[0].chartOptions.data ?? []
+      this.type?.setValue(dynamicData[0].type)
+      this.size?.setValue(this.types[dynamicData[0].size])
+      this.position?.setValue(dynamicData[0].position)
+      switch (dynamicData[0].type) {
+        case 'pie':
+          chartOptionData.forEach(item => {
+            const formGroup = new FormGroup({
+              asset: new FormControl({ value: item.asset, disabled: true }),
+              amount: new FormControl(item.amount, [Validators.required])
+            })
+            formArray.push(formGroup)
+          })
+          break;
+        case 'bar':
+          chartOptionData.forEach(item => {
+            const formGroup = new FormGroup({
+              month: new FormControl({ value: item.month, disabled: true }),
+              avgTemp: new FormControl(item.avgTemp, [Validators.required]),
+              iceCreamSales: new FormControl(item.iceCreamSales, [Validators.required])
+            })
+            formArray.push(formGroup)
+          })
+          console.log(formArray.value)
+          console.log(this.data.value)
+          break;
+        default:
+          chartOptionData.forEach(item => {
+            const formGroup = new FormGroup({
+              quarter: new FormControl({ value: item.quarter, disabled: true }),
+              petrol: new FormControl(item.petrol, [Validators.required]),
+              diesel: new FormControl(item.diesel, [Validators.required])
+            })
+            formArray.push(formGroup)
+          })
+          break;
+      }
+    }
+  }
+
+  onChartHeaderChange(event: any) {
+    const selectedValue = event.target.value;
+    this.prepareData(selectedValue)
+  }
+
+  get data() {
+    return this.myForm.get('data') as FormArray;
+  }
+
+  get type() {
+    return this.myForm.get('type');
+  }
+
+  get size() {
+    return this.myForm.get('size');
+  }
+
+  get position() {
+    return this.myForm.get('position');
+  }
+
+  updatePosition(items: DashboardConfig[], itemId: any, newPosition: any): DashboardConfig[] {
+    const currentItem = items.find(item => item._id === itemId);
+    if (!currentItem) {
+      console.log("Item not found");
+      return [];
+    }
+    const oldPosition = currentItem.position;
+    // If position is not changing, no need to update
+    if (oldPosition === newPosition) return items;
+    items = items.map(item => {
+      // Handle upward shift
+      if (newPosition < oldPosition) {
+        if (item.position >= newPosition && item.position < oldPosition && item._id !== itemId) {
+          return { ...item, position: item.position + 1 };
+        }
+      }
+      // Handle downward shift
+      else if (newPosition > oldPosition) {
+        if (item.position <= newPosition && item.position > oldPosition && item._id !== itemId) {
+          return { ...item, position: item.position - 1 };
+        }
+      }
+      // Update the current item's position
+      if (item._id === itemId) {
+        return { ...item, position: newPosition };
+      }
+      // Return the item as is if no change is required
+      return item;
+    });
+    // Sort the array by the updated position
+    items.sort((a, b) => a.position - b.position);
+    return items;
+  }
+
+  onSubmit() {
+    if (this.myForm.valid) {
+      const formData = this.myForm.getRawValue();
+      const updatedDashboardConfig = [...this.updatePosition([...this.dashboardConfig], Number(formData.chartheader), formData.position)];
+      const index = updatedDashboardConfig.findIndex(obj => obj._id === Number(formData.chartheader));
+      if (index !== -1) {
+        updatedDashboardConfig[index] = { ...updatedDashboardConfig[index], data: formData.data, size: formData.size };
+      }
+      this.dashboardService.loadDashboardConfig(updatedDashboardConfig);
+      this.getConfig()
+    }
   }
 
   getConfig() {
